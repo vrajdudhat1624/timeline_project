@@ -7,6 +7,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { fetchEmployeeBillingData } from "@/lib/data"
 import { GanttChart } from "@/components/charts/gantt-chart"
 import { TimelineHeader } from "@/components/timeline/timeline-header"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { TimelineFilters } from "./timeline-filters"
+import { TimelineView } from "./timeline-view"
+import { TimelineGantt } from "./timeline-gantt"
+import { BumpChartView } from "@/components/timeline/bump-chart-view"
+import { NetworkChartView } from "@/components/timeline/network-chart-view"
 
 export function GanttChartView() {
   const [loading, setLoading] = useState(true)
@@ -56,7 +62,26 @@ export function GanttChartView() {
             </Alert>
           ) : (
             <div className="h-full">
-              <GanttChart data={data} />
+              <Tabs defaultValue="timeline">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="timeline">Timeline</TabsTrigger>
+                  <TabsTrigger value="gantt">Gantt Chart</TabsTrigger>
+                  <TabsTrigger value="bump">Bump Chart</TabsTrigger>
+                  <TabsTrigger value="network">Network Chart</TabsTrigger>
+                </TabsList>
+                <TabsContent value="timeline">
+                  <TimelineView />
+                </TabsContent>
+                <TabsContent value="gantt">
+                  <TimelineGantt />
+                </TabsContent>
+                <TabsContent value="bump">
+                  <BumpChartView />
+                </TabsContent>
+                <TabsContent value="network">
+                  <NetworkChartView />
+                </TabsContent>
+              </Tabs>
             </div>
           )}
         </CardContent>

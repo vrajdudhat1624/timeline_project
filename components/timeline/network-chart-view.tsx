@@ -43,7 +43,7 @@ export function NetworkChartView() {
       <Card className="h-[calc(100%-180px)]">
         <CardHeader>
           <CardTitle>Project Network</CardTitle>
-          <CardDescription>Visualizing relationships between employees and projects</CardDescription>
+          <CardDescription>Visualizing project relationships and connections</CardDescription>
         </CardHeader>
         <CardContent className="h-[calc(100%-80px)]">
           {loading ? (
@@ -67,42 +67,35 @@ export function NetworkChartView() {
 
 // Process data for network chart
 function processDataForNetworkChart(billingData: any[]) {
-  // Create nodes for employee and projects
-  const employeeNode = {
-    id: "Employee 2185",
-    group: 1,
-    value: 30,
-  }
-
-  // Get unique projects
-  const projectKeys = [...new Set(billingData.map((entry) => entry.project_key))]
-
-  // Create project nodes
-  const projectNodes = projectKeys.map((key) => ({
-    id: `Project ${key}`,
-    group: 2,
-    value: 20,
-  }))
-
-  // Calculate total hours per project
-  const projectHours = new Map()
+  const nodes = new Set<string>()
+  const links = new Set<string>()
+  const nodeMap = new Map<string, { id: string, group: number, value: number }>()
+  const linkMap = new Map<string, { source: string, target: string, value: number }>()
 
   billingData.forEach((entry) => {
-    const projectKey = entry.project_key
-    const hours = Number.parseFloat(entry.regular_hours) || 0
+    // Add employee node
+    const employeeId = `Employee_${entry.employee_id}`
+    if (!nodeMap.has(employeeId)) {
+      nodeMap.set(employeeId, { id: employeeId, group: 1, value: 1 })
+    }
 
-    projectHours.set(projectKey, (projectHours.get(projectKey) || 0) + hours)
+    // Add project node
+    const projectId = `Project_${entry.project_key}`
+    if (!nodeMap.has(projectId)) {
+      nodeMap.set(projectId, { id: projectId, group: 2, value: 1 })
+    }
+
+    // Add link
+    const linkKey = `${employeeId}-${projectId}`
+    if (!linkMap.has(linkKey)) {
+      linkMap.set(linkKey, { source: employeeId, target: projectId, value: 1 })
+    } else {
+      linkMap.get(linkKey)!.value += 1
+    }
   })
 
-  // Create links between employee and projects
-  const links = projectKeys.map((key) => ({
-    source: "Employee 2185",
-    target: `Project ${key}`,
-    value: Math.max(1, Math.min(10, Math.round(projectHours.get(key) / 10))),
-  }))
-
   return {
-    nodes: [employeeNode, ...projectNodes],
-    links: links,
+    nodes: Array.from(nodeMap.values()),
+    links: Array.from(linkMap.values())
   }
 }

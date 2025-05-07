@@ -42,8 +42,8 @@ export function BumpChartView() {
 
       <Card className="h-[calc(100%-180px)]">
         <CardHeader>
-          <CardTitle>Project Engagement Over Time</CardTitle>
-          <CardDescription>Visualizing project involvement by rank and importance</CardDescription>
+          <CardTitle>Project Rankings</CardTitle>
+          <CardDescription>Tracking project rankings over time</CardDescription>
         </CardHeader>
         <CardContent className="h-[calc(100%-80px)]">
           {loading ? (
@@ -67,65 +67,42 @@ export function BumpChartView() {
 
 // Process data for bump chart
 function processDataForBumpChart(billingData: any[]) {
-  // Group data by project and month
-  const projectMonthHours = new Map()
+  // Group data by month and project
+  const monthlyData = new Map<string, Map<string, number>>()
 
   billingData.forEach((entry) => {
-    const projectKey = entry.project_key
     const date = new Date(entry.transfer_date)
-    const month = date.toLocaleString("default", { month: "short" })
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const projectKey = entry.project_key
+
+    if (!monthlyData.has(monthKey)) {
+      monthlyData.set(monthKey, new Map())
+    }
+
+    const monthData = monthlyData.get(monthKey)!
     const hours = Number.parseFloat(entry.regular_hours) || 0
-
-    const key = `${projectKey}-${month}`
-    projectMonthHours.set(key, (projectMonthHours.get(key) || 0) + hours)
+    monthData.set(projectKey, (monthData.get(projectKey) || 0) + hours)
   })
 
-  // Get unique projects and months
-  const projects = [...new Set(billingData.map((entry) => entry.project_key))]
-  const months = [
-    ...new Set(
-      billingData.map((entry) => {
-        const date = new Date(entry.transfer_date)
-        return date.toLocaleString("default", { month: "short" })
-      }),
-    ),
-  ]
-
-  // Sort months chronologically
-  const monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-  months.sort((a, b) => monthOrder.indexOf(a) - monthOrder.indexOf(b))
-
-  // For each month, rank projects by hours
-  const projectRanksByMonth = new Map()
-
-  months.forEach((month) => {
-    const projectHours = projects.map((project) => ({
-      project,
-      hours: projectMonthHours.get(`${project}-${month}`) || 0,
-    }))
-
+  // Convert to bump chart format
+  const result: any[] = []
+  monthlyData.forEach((projectHours, month) => {
     // Sort projects by hours for this month
-    projectHours.sort((a, b) => b.hours - a.hours)
+    const sortedProjects = Array.from(projectHours.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([project, hours], index) => ({
+        id: `Project ${project}`,
+        data: [
+          {
+            x: month,
+            y: index + 1,
+            value: hours
+          }
+        ]
+      }))
 
-    // Assign ranks (1 is highest)
-    projectHours.forEach((item, index) => {
-      const key = `${item.project}-${month}`
-      projectRanksByMonth.set(key, index + 1)
-    })
+    result.push(...sortedProjects)
   })
 
-  // Format data for the bump chart
-  return projects
-    .map((project) => {
-      return {
-        id: `Project ${project}`,
-        data: months
-          .map((month) => ({
-            x: month,
-            y: projectRanksByMonth.get(`${project}-${month}`) || null,
-          }))
-          .filter((item) => item.y !== null), // Remove months with no data
-      }
-    })
-    .filter((series) => series.data.length > 0) // Remove projects with no data
+  return result
 }

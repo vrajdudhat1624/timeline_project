@@ -4,6 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TimelineFilters } from "./timeline-filters"
 import { TimelineView } from "./timeline-view"
 import { TimelineGantt } from "./timeline-gantt"
+import { BumpChartView } from "./bump-chart-view"
+import { NetworkChartView } from "./network-chart-view"
 
 export function Timeline() {
   return (
@@ -25,12 +27,20 @@ export function Timeline() {
             <TabsList className="mb-4">
               <TabsTrigger value="timeline">Timeline</TabsTrigger>
               <TabsTrigger value="gantt">Gantt Chart</TabsTrigger>
+              <TabsTrigger value="bump">Bump Chart</TabsTrigger>
+              <TabsTrigger value="network">Network Chart</TabsTrigger>
             </TabsList>
             <TabsContent value="timeline">
               <TimelineView />
             </TabsContent>
             <TabsContent value="gantt">
               <TimelineGantt />
+            </TabsContent>
+            <TabsContent value="bump">
+              <BumpChartView />
+            </TabsContent>
+            <TabsContent value="network">
+              <NetworkChartView />
             </TabsContent>
           </Tabs>
         </CardContent>

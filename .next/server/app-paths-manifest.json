@@ -1,3 +1,7 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
+  "/timeline/network/page": "app/timeline/network/page.js",
+  "/timeline/bump/page": "app/timeline/bump/page.js",
+  "/timeline/gantt/page": "app/timeline/gantt/page.js",
   "/page": "app/page.js"
 }

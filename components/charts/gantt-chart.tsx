@@ -7,9 +7,54 @@ import { Button } from "@/components/ui/button"
 import { ZoomIn, ZoomOut } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 
-interface GanttChartProps {
-  data: any[]
+interface Subtask {
+  id: string
+  start: Date
+  end: Date
+  progress?: number
 }
+
+interface Task {
+  id: string
+  start: Date
+  end: Date
+  progress?: number
+  subtasks?: Subtask[]
+}
+
+interface Project {
+  id: string
+  data: Task[]
+}
+
+interface GanttChartProps {
+  data: Project[]
+}
+
+type FlattenedItem =
+  | {
+      id: string
+      type: "project"
+      expanded: boolean
+    }
+  | {
+      id: string
+      parentId: string
+      type: "task"
+      start: Date
+      end: Date
+      progress?: number
+      expanded: boolean
+      subtasks?: Subtask[]
+    }
+  | {
+      id: string
+      parentId: string
+      type: "subtask"
+      start: Date
+      end: Date
+      progress?: number
+    }
 
 export function GanttChart({ data }: GanttChartProps) {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -21,31 +66,18 @@ export function GanttChart({ data }: GanttChartProps) {
 
   const toggleProject = (projectId: string) => {
     const newExpanded = new Set(expandedProjects)
-    if (newExpanded.has(projectId)) {
-      newExpanded.delete(projectId)
-    } else {
-      newExpanded.add(projectId)
-    }
+    newExpanded.has(projectId) ? newExpanded.delete(projectId) : newExpanded.add(projectId)
     setExpandedProjects(newExpanded)
   }
 
   const toggleTask = (taskId: string) => {
     const newExpanded = new Set(expandedTasks)
-    if (newExpanded.has(taskId)) {
-      newExpanded.delete(taskId)
-    } else {
-      newExpanded.add(taskId)
-    }
+    newExpanded.has(taskId) ? newExpanded.delete(taskId) : newExpanded.add(taskId)
     setExpandedTasks(newExpanded)
   }
 
-  const zoomIn = () => {
-    setZoomLevel((prev) => Math.min(prev + 0.2, 2))
-  }
-
-  const zoomOut = () => {
-    setZoomLevel((prev) => Math.max(prev - 0.2, 0.5))
-  }
+  const zoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.2, 2))
+  const zoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.2, 0.5))
 
   useEffect(() => {
     if (!svgRef.current || !data || data.length === 0) return
@@ -54,15 +86,13 @@ export function GanttChart({ data }: GanttChartProps) {
     const textColor = isDarkTheme ? "#e1e1e6" : "#1a1a1a"
     const gridColor = isDarkTheme ? "#333" : "#ddd"
 
-    // Clear previous chart
     d3.select(svgRef.current).selectAll("*").remove()
 
     const margin = { top: 40, right: 40, bottom: 40, left: 200 }
     const width = (svgRef.current.clientWidth - margin.left - margin.right) * zoomLevel
     const rowHeight = 30
 
-    // Flatten data based on expanded state
-    const flattenedData = []
+    const flattenedData: FlattenedItem[] = []
 
     data.forEach((project) => {
       flattenedData.push({
@@ -73,19 +103,28 @@ export function GanttChart({ data }: GanttChartProps) {
 
       if (expandedProjects.has(project.id)) {
         project.data.forEach((task) => {
+          const taskId = `${project.id}-${task.id}`
+
           flattenedData.push({
-            id: `${project.id}-${task.id}`,
+            id: taskId,
             parentId: project.id,
-            ...task,
-            expanded: expandedTasks.has(`${project.id}-${task.id}`),
+            type: "task",
+            start: task.start,
+            end: task.end,
+            progress: task.progress,
+            expanded: expandedTasks.has(taskId),
+            subtasks: task.subtasks,
           })
 
-          if (expandedTasks.has(`${project.id}-${task.id}`) && task.subtasks) {
+          if (expandedTasks.has(taskId) && task.subtasks) {
             task.subtasks.forEach((subtask) => {
               flattenedData.push({
-                id: `${project.id}-${task.id}-${subtask.id}`,
-                parentId: `${project.id}-${task.id}`,
-                ...subtask,
+                id: `${taskId}-${subtask.id}`,
+                parentId: taskId,
+                type: "subtask",
+                start: subtask.start,
+                end: subtask.end,
+                progress: subtask.progress,
               })
             })
           }
@@ -95,13 +134,13 @@ export function GanttChart({ data }: GanttChartProps) {
 
     const height = flattenedData.length * rowHeight
 
-    // Find min and max dates
-    const allDates = flattenedData.filter((d) => d.start && d.end).flatMap((d) => [d.start, d.end])
+    const allDates = flattenedData
+      .filter((d) => "start" in d && "end" in d)
+      .flatMap((d) => [(d as any).start, (d as any).end]) as Date[]
 
     const minDate = d3.min(allDates) || new Date(2023, 0, 1)
     const maxDate = d3.max(allDates) || new Date(2023, 11, 31)
 
-    // Add a month buffer on each side
     const startDate = new Date(minDate)
     startDate.setMonth(startDate.getMonth() - 1)
 
@@ -110,30 +149,26 @@ export function GanttChart({ data }: GanttChartProps) {
 
     const svg = d3.select(svgRef.current).append("g").attr("transform", `translate(${margin.left},${margin.top})`)
 
-    // Create scales
     const xScale = d3.scaleTime().domain([startDate, endDate]).range([0, width])
+    const yScale = d3.scaleBand().domain(flattenedData.map((d) => d.id)).range([0, height]).padding(0.2)
 
-    const yScale = d3
-      .scaleBand()
-      .domain(flattenedData.map((d) => d.id))
-      .range([0, height])
-      .padding(0.2)
+    const colorScale = d3
+      .scaleOrdinal<string>()
+      .domain(["project", "task", "subtask"])
+      .range(["#3b82f6", "#10b981", "#8b5cf6"])
 
-    // Create color scale
-    const colorScale = d3.scaleOrdinal().domain(["project", "task", "subtask"]).range(["#3b82f6", "#10b981", "#8b5cf6"])
-
-    // Add grid lines
-    const xAxis = d3.axisBottom(xScale).ticks(d3.timeMonth).tickFormat(d3.timeFormat("%b %Y"))
-
+    // X-axis with tick formatter fix (Line 164)
     svg
       .append("g")
       .attr("transform", `translate(0,${height})`)
-      .call(xAxis)
+      .call(
+        d3.axisBottom(xScale)
+          .ticks(d3.timeMonth)
+          .tickFormat((d) => d3.timeFormat("%b %Y")(d as Date))
+      )
       .selectAll("text")
       .attr("fill", textColor)
-      .style("text-anchor", "middle")
 
-    // Add vertical grid lines
     svg
       .append("g")
       .attr("class", "grid")
@@ -148,14 +183,10 @@ export function GanttChart({ data }: GanttChartProps) {
       .attr("stroke", gridColor)
       .attr("stroke-opacity", 0.3)
 
-    // Add bars for each item
     flattenedData.forEach((d, i) => {
-      if (!d.start || !d.end) return
-
+      const y = yScale(d.id)!
       const barHeight = yScale.bandwidth()
-      const y = yScale(d.id)
 
-      // Add row background
       svg
         .append("rect")
         .attr("x", 0)
@@ -164,87 +195,71 @@ export function GanttChart({ data }: GanttChartProps) {
         .attr("height", barHeight)
         .attr("fill", i % 2 === 0 ? (isDarkTheme ? "#1a1a1a" : "#f9fafb") : "transparent")
 
-      // Add the bar
-      const bar = svg
-        .append("rect")
-        .attr("x", xScale(d.start))
-        .attr("y", y)
-        .attr("width", xScale(d.end) - xScale(d.start))
-        .attr("height", barHeight)
-        .attr("rx", 4)
-        .attr("ry", 4)
-        .attr("fill", colorScale(d.type))
-        .attr("opacity", 0.8)
-        .on("mouseover", function (event) {
-          d3.select(this).transition().duration(200).attr("opacity", 1)
-
-          // Show tooltip
-          toast({
-            title: d.id.split("-").pop(),
-            description: `${d3.timeFormat("%b %d, %Y")(d.start)} - ${d3.timeFormat("%b %d, %Y")(d.end)}`,
-            duration: 2000,
-          })
-        })
-        .on("mouseout", function () {
-          d3.select(this).transition().duration(200).attr("opacity", 0.8)
-        })
-
-      // Add progress bar if available
-      if (d.progress) {
+      if ("start" in d && "end" in d) {
         svg
           .append("rect")
           .attr("x", xScale(d.start))
           .attr("y", y)
-          .attr("width", (xScale(d.end) - xScale(d.start)) * (d.progress / 100))
+          .attr("width", xScale(d.end) - xScale(d.start))
           .attr("height", barHeight)
           .attr("rx", 4)
           .attr("ry", 4)
-          .attr("fill", d3.color(colorScale(d.type)).darker(0.8))
-      }
-    })
+          .attr("fill", colorScale(d.type))
+          .attr("opacity", 0.8)
+          .on("mouseover", function () {
+            d3.select(this).transition().duration(200).attr("opacity", 1)
+            toast({
+              title: (d.id as string).split("-").pop() ?? d.id,
+              description: `${d3.timeFormat("%b %d, %Y")(d.start)} - ${d3.timeFormat("%b %d, %Y")(d.end)}`,
+              duration: 2000,
+            })
+          })
+          .on("mouseout", function () {
+            d3.select(this).transition().duration(200).attr("opacity", 0.8)
+          })
 
-    // Add labels
-    flattenedData.forEach((d) => {
-      const y = yScale(d.id) + yScale.bandwidth() / 2
-
-      // Indentation based on hierarchy level
-      let indent = 0
-      if (d.parentId) {
-        if (d.parentId.split("-").length > 1) {
-          indent = 40 // Subtask
-        } else {
-          indent = 20 // Task
+        if (d.progress) {
+          svg
+            .append("rect")
+            .attr("x", xScale(d.start))
+            .attr("y", y)
+            .attr("width", (xScale(d.end) - xScale(d.start)) * (d.progress / 100))
+            .attr("height", barHeight)
+            .attr("rx", 4)
+            .attr("ry", 4)
+            .attr(
+              "fill",
+              d3.color(colorScale(d.type))?.darker(0.8).toString() ?? colorScale(d.type)
+            )
         }
       }
 
-      // Add expand/collapse icon for projects and tasks with subtasks
+      const indent = d.type === "task" ? 20 : d.type === "subtask" ? 40 : 0
+      const labelY = y + barHeight / 2 + 5
+
       if (d.type === "project" || (d.type === "task" && d.subtasks)) {
         const isExpanded = d.type === "project" ? expandedProjects.has(d.id) : expandedTasks.has(d.id)
 
         svg
           .append("text")
           .attr("x", -margin.left + 5 + indent - 15)
-          .attr("y", y + 5)
+          .attr("y", labelY)
           .attr("fill", textColor)
           .attr("class", "cursor-pointer")
           .text(isExpanded ? "▼" : "►")
           .style("font-size", "12px")
           .on("click", () => {
-            if (d.type === "project") {
-              toggleProject(d.id)
-            } else {
-              toggleTask(d.id)
-            }
+            d.type === "project" ? toggleProject(d.id) : toggleTask(d.id)
           })
       }
 
-      // Add label
+      // Line 257 fix
       svg
         .append("text")
         .attr("x", -margin.left + 5 + indent)
-        .attr("y", y + 5)
+        .attr("y", labelY)
         .attr("fill", textColor)
-        .text(d.id.split("-").pop())
+        .text((d.id as string).split("-").pop() ?? d.id)
         .style("font-size", "12px")
     })
   }, [data, theme, expandedProjects, expandedTasks, zoomLevel, toast])
